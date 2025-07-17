@@ -1,0 +1,110 @@
+.nav-tabs-custom .rmBorder .nav-link::after {
+  height: 0px !important;
+}
+
+.border-none-modal .modal-content {
+  border: none;
+}
+
+.slide-content {
+  max-height: 40px;
+  overflow: hidden;
+  transition: max-height 1.5s ease-in-out;
+}
+
+.slide-content.open {
+  max-height: 100%;
+}
+
+// @media (min-width: 768px) {
+//   .dropdown:hover .dropdown-menu {
+//     display: block;
+//   }
+// }
+.media-card {
+  height: 103px;
+  border: 1px dashed #ccc;
+  border-radius: 5px;
+  text-align: center;
+  color: #777;
+  background-color: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.media-content {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholder-text {
+  font-size: 12px;
+  color: #777;
+}
+
+// .modal-backdrop
+// {
+//   --vz-backdrop-bg:red !important
+// }
+
+.custom-backdrop {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  /* Red with 50% opacity */
+}
+
+@keyframes breathing {
+  0% {
+    box-shadow: 0 14px 220px 0 rgba(255, 0, 0, 0.5),
+      0 16px 520px 0 rgba(255, 55, 55, 0.5);
+  }
+
+  50% {
+    box-shadow: 0 14px 250px 0 rgba(255, 0, 0, 0.8),
+      0 16px 550px 0 rgba(255, 55, 55, 0.8);
+  }
+
+  100% {
+    box-shadow: 0 14px 220px 0 rgba(255, 0, 0, 0.5),
+      0 16px 520px 0 rgba(255, 55, 55, 0.5);
+  }
+}
+
+.custom-shadow {
+  animation: breathing 0.5s infinite ease-in-out;
+}
+
+.static_custom_shadow {
+box-shadow: 0 12px 30px 0 rgba(255, 0, 0, 0.5),
+    0 1px 40px 0 rgba(255, 55, 55, 0.5);
+}
+
+.breathing-bg {
+  background-color: #ff0000;
+  /* base red */
+  animation: breathe 1.5s ease-in-out infinite;
+  padding: 5px 12px;
+  border-radius: 50%;
+  /* optional: for a rounded look */
+  display: inline-block;
+  /* ensure padding shows */
+}
+
+@keyframes breathe {
+  0% {
+    background-color: #ff5757;
+    box-shadow: 0 0 10px #ff9494;
+  }
+
+  50% {
+    background-color: #ffd4d4;
+    box-shadow: 0 0 20px #ffe2e2;
+  }
+
+  100% {
+    background-color: #ff5757;
+      box-shadow: 0 0 10px #ff9494;
+  }
+}

@@ -1,0 +1,22 @@
+// Actions
+export const API_RESPONSE_SUCCESS = 'API_RESPONSE_SUCCESS';
+export const API_RESPONSE_ERROR = 'API_RESPONSE_ERROR';
+export const GET_HELP = 'GET_HELP';
+export const GET_HELP_BY_ID = 'GET_HELP_BY_ID';
+export const SELECTED_HELP = 'SELECTED_HELP';
+
+// Add HELP
+export const ADD_NEW_HELP = 'ADD_NEW_HELP';
+export const ADD_HELP_SUCCESS = 'ADD_HELP_SUCCESS';
+export const ADD_HELP_FAIL = 'ADD_HELP_FAIL';
+export const ADD_HELP_RESET = 'ADD_HELP_RESET';
+
+// Edit HELP
+export const UPDATE_HELP = 'UPDATE_HELP';
+export const UPDATE_HELP_SUCCESS = 'UPDATE_HELP_SUCCESS';
+export const UPDATE_HELP_FAIL = 'UPDATE_HELP_FAIL';
+
+// Delete HELP
+export const DELETE_HELP = 'DELETE_HELP';
+export const DELETE_HELP_SUCCESS = 'DELETE_HELP_SUCCESS';
+export const DELETE_HELP_FAIL = 'DELETE_HELP_FAIL';

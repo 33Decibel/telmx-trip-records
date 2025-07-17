@@ -1,0 +1,24 @@
+
+  // Actions
+  export const API_RESPONSE_SUCCESS = 'API_RESPONSE_SUCCESS';
+  export const API_RESPONSE_ERROR = 'API_RESPONSE_ERROR';
+  export const GET_ALERTS = 'GET_ALERTS';
+  export const GET_ALERTS_BY_ID = 'GET_ALERTS_BY_ID';
+  export const SELECTED_ALERTS = 'SELECTED_ALERTS';
+  
+  // Add ALERTS
+  export const ADD_NEW_ALERTS = 'ADD_NEW_ALERTS';
+  export const ADD_ALERTS_SUCCESS = 'ADD_ALERTS_SUCCESS';
+  export const ADD_ALERTS_FAIL = 'ADD_ALERTS_FAIL';
+  export const ADD_ALERTS_RESET = 'ADD_ALERTS_RESET';
+  
+  // Edit ALERTS
+  export const UPDATE_ALERTS = 'UPDATE_ALERTS';
+  export const UPDATE_ALERTS_SUCCESS = 'UPDATE_ALERTS_SUCCESS';
+  export const UPDATE_ALERTS_FAIL = 'UPDATE_ALERTS_FAIL';
+  
+  // Delete ALERTS
+  export const DELETE_ALERTS = 'DELETE_ALERTS';
+  export const DELETE_ALERTS_SUCCESS = 'DELETE_ALERTS_SUCCESS';
+  export const DELETE_ALERTS_FAIL = 'DELETE_ALERTS_FAIL';
+  

@@ -1,0 +1,11 @@
+.hover-container:hover .nav-hidden-items {
+  display: block;
+}
+
+.nav-hidden-items {
+  display: none;
+}
+
+.light-amber-color {
+  color: #ffff00;
+}
