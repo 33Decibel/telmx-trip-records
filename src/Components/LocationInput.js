@@ -1,26 +1,26 @@
 import React, { useState } from 'react';
-import { geocode } from '../services/geocodeService';
 import {
   getPlacesSuggestions,
   getPlaceDetails,
 } from '../services/googleMapsService';
 
-function LocationInput({
+export default function LocationInput({
   label,
   value,
   onChange,
   onLocationSelect,
   placeholder,
-  useGoogleAPI = true,
+  disabled,
 }) {
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sessionToken] = useState(
-    () =>
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15)
-  );
+  const [sessionToken] = useState(() => {
+    if (window.google?.maps?.places?.AutocompleteSessionToken) {
+      return new window.google.maps.places.AutocompleteSessionToken();
+    }
+    return Math.random().toString(36);
+  });
 
   const fetchSuggestions = async (query) => {
     if (!query || query.length < 3) {
@@ -31,47 +31,21 @@ function LocationInput({
 
     setLoading(true);
     try {
-      if (useGoogleAPI) {
-        const result = await getPlacesSuggestions(query, sessionToken);
-        if (result.status === 'success') {
-          setSuggestions(result.predictions);
-          setShowDropdown(result.predictions.length > 0);
-        } else {
-          await fetchOSMSuggestions(query);
-        }
+      const result = await getPlacesSuggestions(query, sessionToken);
+      if (result.status === 'success') {
+        setSuggestions(result.predictions);
+        setShowDropdown(result.predictions.length > 0);
       } else {
-        await fetchOSMSuggestions(query);
+        console.error('Google Places API error:', result.error);
+        setSuggestions([]);
+        setShowDropdown(false);
       }
     } catch (error) {
-      await fetchOSMSuggestions(query);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchOSMSuggestions = async (query) => {
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-        query
-      )}&limit=5`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      const osmSuggestions = data.map((item) => ({
-        placeId: item.osm_id,
-        description: item.display_name,
-        mainText: item.display_name.split(',')[0],
-        secondaryText: item.display_name,
-        lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon),
-        isOSM: true,
-      }));
-
-      setSuggestions(osmSuggestions);
-      setShowDropdown(osmSuggestions.length > 0);
-    } catch (error) {
+      console.error('Error fetching suggestions:', error);
       setSuggestions([]);
       setShowDropdown(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,32 +58,22 @@ function LocationInput({
   const handleSelect = async (place) => {
     setLoading(true);
     try {
-      let locationData;
-
-      if (place.isOSM) {
-        locationData = {
-          lat: place.lat,
-          lng: place.lng,
-          address: place.description,
+      const details = await getPlaceDetails(place.place_id, sessionToken);
+      if (details.status === 'success') {
+        const locationData = {
+          lat: details.lat,
+          lng: details.lng,
+          address: details.address,
+          name: details.name,
         };
-      } else {
-        const details = await getPlaceDetails(place.placeId, sessionToken);
-        if (details.status === 'success') {
-          locationData = {
-            lat: details.lat,
-            lng: details.lng,
-            address: details.address,
-            name: details.name,
-          };
-        } else {
-          return;
-        }
-      }
 
-      onChange(locationData.address);
-      onLocationSelect(locationData);
-      setSuggestions([]);
-      setShowDropdown(false);
+        onChange(locationData.address);
+        onLocationSelect(locationData);
+        setSuggestions([]);
+        setShowDropdown(false);
+      } else {
+        console.error('Place details error:', details.error);
+      }
     } catch (error) {
       console.error('Error selecting place:', error);
     } finally {
@@ -127,6 +91,7 @@ function LocationInput({
         onChange={handleInputChange}
         autoComplete='off'
         style={{ borderRadius: '6px' }}
+        disabled={disabled}
       />
 
       {loading && (
@@ -164,9 +129,13 @@ function LocationInput({
               <div className='d-flex align-items-center'>
                 <span className='me-2'>📍</span>
                 <div>
-                  <div className='fw-bold'>{suggestion.mainText}</div>
+                  <div className='fw-bold'>
+                    {suggestion.structured_formatting?.main_text ||
+                      suggestion.description}
+                  </div>
                   <small className='text-muted'>
-                    {suggestion.secondaryText || suggestion.description}
+                    {suggestion.structured_formatting?.secondary_text ||
+                      suggestion.description}
                   </small>
                 </div>
               </div>
@@ -177,5 +146,3 @@ function LocationInput({
     </div>
   );
 }
-
-export default LocationInput;

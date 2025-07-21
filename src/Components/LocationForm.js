@@ -1,478 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { debounce } from 'lodash';
+import {
+  loadGoogleMapsScript,
+  getDistanceMatrix,
+  getDirections,
+  reverseGeocode,
+  haversineDistance,
+  calculateDuration,
+} from '../services/googleMapsService';
+import GoogleMapView from './GoogleMapView';
+import TravelModeSelector from './TravelModeSelector';
+import LocationInput from './LocationInput';
+import DistanceResult from './DistanceResult';
+import ConfirmationDialog from './ConfirmationDialog';
+import { Input } from 'reactstrap';
 
-// Google Maps API configuration
-const GOOGLE_MAPS_API_KEY = 'AIzaSyDs8LkOCcUPyB5Rh-oWdyQaOXZm-NIC7eY';
-
-// Google Maps API service functions
-const loadGoogleMapsScript = () => {
-  return new Promise((resolve, reject) => {
-    if (window.google) {
-      resolve(window.google);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,geometry`;
-    script.async = true;
-    script.onload = () => resolve(window.google);
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-};
-
-const getPlacesSuggestions = (query, sessionToken) => {
-  return new Promise((resolve) => {
-    if (!window.google) {
-      resolve({ status: 'error', error: 'Google Maps not loaded' });
-      return;
-    }
-
-    const service = new window.google.maps.places.AutocompleteService();
-    service.getPlacePredictions(
-      {
-        input: query,
-        sessionToken: sessionToken,
-      },
-      (predictions, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-          resolve({ status: 'success', predictions });
-        } else {
-          resolve({ status: 'error', error: status });
-        }
-      }
-    );
-  });
-};
-
-const getPlaceDetails = (placeId, sessionToken) => {
-  return new Promise((resolve) => {
-    if (!window.google) {
-      resolve({ status: 'error', error: 'Google Maps not loaded' });
-      return;
-    }
-
-    const service = new window.google.maps.places.PlacesService(
-      document.createElement('div')
-    );
-
-    service.getDetails(
-      {
-        placeId: placeId,
-        sessionToken: sessionToken,
-        fields: ['geometry', 'formatted_address', 'name'],
-      },
-      (place, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-          resolve({
-            status: 'success',
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-            address: place.formatted_address,
-            name: place.name,
-          });
-        } else {
-          resolve({ status: 'error', error: status });
-        }
-      }
-    );
-  });
-};
-
-const getDistanceMatrix = (origins, destinations) => {
-  return new Promise((resolve) => {
-    if (!window.google) {
-      resolve({ status: 'error', error: 'Google Maps not loaded' });
-      return;
-    }
-
-    const service = new window.google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      {
-        origins: origins,
-        destinations: destinations,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        unitSystem: window.google.maps.UnitSystem.METRIC,
-      },
-      (response, status) => {
-        if (status === window.google.maps.DistanceMatrixStatus.OK) {
-          const element = response.rows[0].elements[0];
-          if (element.status === 'OK') {
-            resolve({
-              status: 'success',
-              distance: element.distance.text,
-              duration: element.duration.text,
-              distanceValue: element.distance.value / 1000, // Convert to km
-              source: 'google',
-              startAddress: origins[0].address || 'Start location',
-              endAddress: destinations[0].address || 'End location',
-            });
-          } else {
-            resolve({ status: 'error', error: element.status });
-          }
-        } else {
-          resolve({ status: 'error', error: status });
-        }
-      }
-    );
-  });
-};
-
-const getDirections = (origin, destination) => {
-  return new Promise((resolve) => {
-    if (!window.google) {
-      resolve({ status: 'error', error: 'Google Maps not loaded' });
-      return;
-    }
-
-    const service = new window.google.maps.DirectionsService();
-    service.route(
-      {
-        origin: origin,
-        destination: destination,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (response, status) => {
-        if (status === window.google.maps.DirectionsStatus.OK) {
-          resolve({
-            status: 'success',
-            directions: response,
-          });
-        } else {
-          resolve({ status: 'error', error: status });
-        }
-      }
-    );
-  });
-};
-
-// Location Input Component
-function LocationInput({
-  label,
-  value,
-  onChange,
-  onLocationSelect,
-  placeholder,
-  disabled,
-}) {
-  const [suggestions, setSuggestions] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [sessionToken] = useState(() => {
-    if (window.google?.maps?.places?.AutocompleteSessionToken) {
-      return new window.google.maps.places.AutocompleteSessionToken();
-    }
-    return Math.random().toString(36);
-  });
-
-  const fetchSuggestions = async (query) => {
-    if (!query || query.length < 3) {
-      setSuggestions([]);
-      setShowDropdown(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await getPlacesSuggestions(query, sessionToken);
-      if (result.status === 'success') {
-        setSuggestions(result.predictions);
-        setShowDropdown(result.predictions.length > 0);
-      } else {
-        console.error('Google Places API error:', result.error);
-        setSuggestions([]);
-        setShowDropdown(false);
-      }
-    } catch (error) {
-      console.error('Error fetching suggestions:', error);
-      setSuggestions([]);
-      setShowDropdown(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const input = e.target.value;
-    onChange(input);
-    fetchSuggestions(input);
-  };
-
-  const handleSelect = async (place) => {
-    setLoading(true);
-    try {
-      const details = await getPlaceDetails(place.place_id, sessionToken);
-      if (details.status === 'success') {
-        const locationData = {
-          lat: details.lat,
-          lng: details.lng,
-          address: details.address,
-          name: details.name,
-        };
-
-        onChange(locationData.address);
-        onLocationSelect(locationData);
-        setSuggestions([]);
-        setShowDropdown(false);
-      } else {
-        console.error('Place details error:', details.error);
-      }
-    } catch (error) {
-      console.error('Error selecting place:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className='position-relative'>
-      <input
-        type='text'
-        className='form-control form-control-sm'
-        placeholder={placeholder}
-        value={value}
-        onChange={handleInputChange}
-        autoComplete='off'
-        style={{ borderRadius: '6px' }}
-        disabled={disabled}
-      />
-
-      {loading && (
-        <div
-          className='position-absolute top-100 start-0 w-100 p-2 bg-light border rounded-bottom'
-          style={{ zIndex: 1000 }}
-        >
-          <div className='text-center'>
-            <div
-              className='spinner-border spinner-border-sm'
-              role='status'
-            ></div>
-            <small className='ms-2'>Searching...</small>
-          </div>
-        </div>
-      )}
-
-      {showDropdown && suggestions.length > 0 && !loading && (
-        <ul
-          className='list-group position-absolute w-100 shadow-sm'
-          style={{
-            maxHeight: '200px',
-            overflowY: 'auto',
-            zIndex: 1000,
-            top: '100%',
-          }}
-        >
-          {suggestions.map((suggestion, index) => (
-            <li
-              key={index}
-              className='list-group-item list-group-item-action p-2'
-              onClick={() => handleSelect(suggestion)}
-              style={{ cursor: 'pointer', fontSize: '0.9rem' }}
-            >
-              <div className='d-flex align-items-center'>
-                <span className='me-2'>📍</span>
-                <div>
-                  <div className='fw-bold'>
-                    {suggestion.structured_formatting?.main_text ||
-                      suggestion.description}
-                  </div>
-                  <small className='text-muted'>
-                    {suggestion.structured_formatting?.secondary_text ||
-                      suggestion.description}
-                  </small>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// Google Maps Component
-function GoogleMapView({ origin, destination, directions }) {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const directionsRendererRef = useRef(null);
-
-  useEffect(() => {
-    if (window.google && mapRef.current) {
-      initializeMap();
-    }
-  }, [origin, destination, directions]);
-
-  const initializeMap = () => {
-    if (!mapRef.current) return;
-
-    const map = new window.google.maps.Map(mapRef.current, {
-      zoom: 10,
-      center: origin || { lat: 28.6139, lng: 77.209 }, // Default to Delhi
-      mapTypeId: 'roadmap',
-    });
-
-    mapInstanceRef.current = map;
-
-    // Clear previous directions
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-    }
-
-    // Add markers
-    if (origin) {
-      new window.google.maps.Marker({
-        position: origin,
-        map: map,
-        title: 'Start Location',
-        icon: {
-          url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
-        },
-      });
-    }
-
-    if (destination) {
-      new window.google.maps.Marker({
-        position: destination,
-        map: map,
-        title: 'End Location',
-        icon: {
-          url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-        },
-      });
-    }
-
-    // Show directions if available
-    if (directions) {
-      const directionsRenderer = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: false,
-        polylineOptions: {
-          strokeColor: '#4f46e5',
-          strokeOpacity: 1.0,
-          strokeWeight: 4,
-        },
-      });
-      directionsRenderer.setMap(map);
-      directionsRenderer.setDirections(directions);
-      directionsRendererRef.current = directionsRenderer;
-    } else if (origin && destination) {
-      // Fit bounds to show both markers
-      const bounds = new window.google.maps.LatLngBounds();
-      bounds.extend(origin);
-      bounds.extend(destination);
-      map.fitBounds(bounds);
-    }
-  };
-
-  return (
-    <div
-      ref={mapRef}
-      style={{
-        height: '300px',
-        borderRadius: '8px',
-        border: '1px solid #dee2e6',
-        backgroundColor: '#f8f9fa',
-      }}
-    />
-  );
-}
-
-// Distance Result Component
-function DistanceResult({ data }) {
-  if (!data) return null;
-
-  const isGoogleData = data.source === 'google';
-  const isStraightLine = data.source === 'haversine';
-
-  return (
-    <div
-      className='card shadow-sm'
-      style={{ borderRadius: '12px', border: 'none' }}
-    >
-      <div className='card-body p-4 text-center'>
-        <h3 className='h5 fw-bold text-dark mb-4'>Distance Result</h3>
-
-        <div className='mb-3'>
-          <div
-            className='display-4 fw-bold'
-            style={{ color: '#4f46e5' }}
-          >
-            {typeof data.distance === 'string'
-              ? data.distance
-              : `${data.distance} km`}
-          </div>
-
-          {data.duration && (
-            <div className='text-muted mt-2'>
-              <i className='fas fa-clock me-2'></i>
-              Duration: {data.duration}
-            </div>
-          )}
-
-          {data.distanceValue && (
-            <div className='text-muted mt-1'>
-              Approximately {(data.distanceValue * 0.621371).toFixed(2)} miles
-            </div>
-          )}
-        </div>
-
-        <div className='mb-3'>
-          <span
-            className={`badge ${
-              isGoogleData
-                ? 'bg-success'
-                : isStraightLine
-                ? 'bg-warning'
-                : 'bg-info'
-            }`}
-          >
-            {isGoogleData
-              ? 'Google Maps Route'
-              : isStraightLine
-              ? 'Straight Line'
-              : 'Road Route'}
-          </span>
-
-          {data.status === 'error' && (
-            <span className='badge bg-danger ms-2'>Error: {data.error}</span>
-          )}
-        </div>
-
-        {data.startAddress && data.endAddress && (
-          <div className='mb-3'>
-            <div className='row'>
-              <div className='col-12 col-md-6'>
-                <div className='small text-success fw-bold'>📍 Start:</div>
-                <div className='small text-muted'>{data.startAddress}</div>
-              </div>
-              <div className='col-12 col-md-6'>
-                <div className='small text-danger fw-bold'>🏁 End:</div>
-                <div className='small text-muted'>{data.endAddress}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <small className='text-muted'>
-          {isGoogleData
-            ? 'Calculated using Google Maps API with real road network data'
-            : isStraightLine
-            ? 'Calculated using GPS coordinates (straight-line distance)'
-            : 'Calculated using road network data'}
-        </small>
-
-        {data.error && (
-          <div className='mt-2'>
-            <small className='text-danger'>
-              Note: Fallback calculation used due to API error
-            </small>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Main Component
-function LocationForm() {
+export default function LocationForm() {
   const [googleLoaded, setGoogleLoaded] = useState(false);
   const [startLocation, setStartLocation] = useState(null);
   const [endLocation, setEndLocation] = useState(null);
@@ -486,8 +29,22 @@ function LocationForm() {
     start: false,
     end: false,
   });
-  const [flowStep, setFlowStep] = useState('start'); // 'start', 'confirm-start', 'end', 'confirm-end'
+  const [flowStep, setFlowStep] = useState('start');
   const [locationError, setLocationError] = useState(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({
+    title: '',
+    message: '',
+    onConfirm: null,
+    onCancel: null,
+  });
+  const [travelMode, setTravelMode] = useState('DRIVING');
+  const [tripPurpose, setTripPurpose] = useState('');
+  const [tripHistory, setTripHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [client, setClient] = useState('');
+  const [vendor, setVendor] = useState('');
+  const [startTime, setStartTime] = useState(null);
 
   // Load Google Maps API
   useEffect(() => {
@@ -499,7 +56,76 @@ function LocationForm() {
         console.error('Error loading Google Maps:', error);
         setLocationError('Failed to load Google Maps. Please try again later.');
       });
+
+    // Load saved history from localStorage
+    const savedHistory = localStorage.getItem('tripHistory');
+    if (savedHistory) {
+      try {
+        setTripHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.error('Error parsing trip history:', e);
+      }
+    }
   }, []);
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    const saveHistory = () => {
+      if (tripHistory.length > 0) {
+        try {
+          const simplifiedHistory = tripHistory.map((trip) => ({
+            id: trip.id,
+            date: trip.date,
+            startName: trip.startName,
+            endName: trip.endName,
+            distance: trip.distance,
+            duration: trip.duration,
+            travelMode: trip.travelMode,
+            tripPurpose: trip.tripPurpose,
+            client: trip.client,
+            vendor: trip.vendor,
+            coordinates: trip.coordinates,
+          }));
+          localStorage.setItem(
+            'tripHistory',
+            JSON.stringify(simplifiedHistory)
+          );
+        } catch (e) {
+          console.error('Error saving history:', e);
+        }
+      }
+    };
+
+    const debouncedSave = debounce(saveHistory, 1000);
+    debouncedSave();
+
+    return () => debouncedSave.cancel();
+  }, [tripHistory]);
+
+  // Auto-save to history when trip is completed
+  useEffect(() => {
+    if (flowStep === 'complete' && distanceResult) {
+      saveTripToHistory();
+    }
+  }, [flowStep, distanceResult]);
+
+  const showConfirmationDialog = (
+    title,
+    message,
+    onConfirm,
+    onCancel = () => setShowDialog(false)
+  ) => {
+    setDialogConfig({
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setShowDialog(false);
+      },
+      onCancel,
+    });
+    setShowDialog(true);
+  };
 
   const getCurrentLocation = (callback) => {
     if (!navigator.geolocation) {
@@ -543,92 +169,114 @@ function LocationForm() {
     );
   };
 
-  const reverseGeocode = (coords) => {
-    return new Promise((resolve) => {
-      if (!window.google) {
-        resolve('Unknown location');
-        return;
-      }
-
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: coords }, (results, status) => {
-        if (status === 'OK' && results[0]) {
-          resolve(results[0].formatted_address);
-        } else {
-          resolve('Unknown location');
-        }
-      });
-    });
-  };
-
   const calculateDistance = async (start, end) => {
+    const straightDistance = haversineDistance(start, end);
+    if (straightDistance < 0.01) {
+      setLocationError('Locations are too close to calculate route');
+      return;
+    }
+
     try {
       // Get distance matrix
       const distanceData = await getDistanceMatrix(
         [{ lat: start.lat, lng: start.lng, address: startName }],
-        [{ lat: end.lat, lng: end.lng, address: endName }]
+        [{ lat: end.lat, lng: end.lng, address: endName }],
+        travelMode
       );
 
       if (distanceData.status === 'success') {
-        setDistanceResult(distanceData);
+        setDistanceResult({
+          ...distanceData,
+          tripPurpose: tripPurpose,
+        });
       } else {
         // Fallback to haversine calculation
         const haversineDist = haversineDistance(start, end);
         setDistanceResult({
           distance: `${haversineDist.toFixed(2)} km`,
-          duration: calculateDuration(haversineDist),
+          duration: calculateDuration(haversineDist, travelMode),
           distanceValue: haversineDist,
           source: 'haversine',
           startAddress: startName,
           endAddress: endName,
           status: 'success',
+          travelMode: travelMode,
+          tripPurpose: tripPurpose,
         });
       }
 
       // Get directions for map
-      const directionsData = await getDirections(start, end);
+      const directionsData = await getDirections(start, end, travelMode);
       if (directionsData.status === 'success') {
         setDirections(directionsData.directions);
       }
     } catch (error) {
       console.error('Error calculating distance:', error);
       setLocationError('Error calculating distance. Please try again.');
+      throw error; // Re-throw for handling in calling function
     }
   };
 
-  const haversineDistance = (start, end) => {
-    const toRad = (x) => (x * Math.PI) / 180;
-    const R = 6371;
-    const dLat = toRad(end.lat - start.lat);
-    const dLon = toRad(end.lng - start.lng);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(start.lat)) *
-        Math.cos(toRad(end.lat)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+  const formatTripDataForAPI = () => {
+    return {
+      user_id: 4,
+      travel_mode: travelMode.toLowerCase(),
+      purpose: tripPurpose,
+      approved_by: null,
+      client: client || null,
+      vendor: vendor || null,
+      start_time: startTime
+        ? startTime.toISOString().replace('T', ' ').slice(0, 19)
+        : null,
+      start_point: startLocation
+        ? `${startLocation.lat},${startLocation.lng}`
+        : null,
+      status: 'active',
+      metadata: {
+        end_point: endLocation ? `${endLocation.lat},${endLocation.lng}` : null,
+        distance: distanceResult?.distance || null,
+        duration: distanceResult?.duration || null,
+        start_address: startName,
+        end_address: endName,
+      },
+    };
   };
 
-  const calculateDuration = (distance, speed = 50) => {
-    if (!distance) return null;
-    const durationMins = (distance / speed) * 60;
-    return `${Math.floor(durationMins)} min`;
+  const saveTripToHistory = () => {
+    if (!distanceResult || !startLocation || !endLocation) return;
+
+    const newTrip = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      startLocation,
+      endLocation,
+      startName,
+      endName,
+      distance: distanceResult.distance,
+      duration: distanceResult.duration,
+      distanceValue: distanceResult.distanceValue,
+      travelMode,
+      tripPurpose,
+      client,
+      vendor,
+      coordinates: {
+        start: { lat: startLocation.lat, lng: startLocation.lng },
+        end: { lat: endLocation.lat, lng: endLocation.lng },
+      },
+    };
+
+    setTripHistory((prev) => {
+      const updatedHistory = [newTrip, ...prev].slice(0, 50);
+      return updatedHistory;
+    });
   };
 
   const handleStartTrip = () => {
+    setStartTime(new Date());
     setLoading((prev) => ({ ...prev, start: true }));
     setLocationError(null);
     getCurrentLocation(async (coords) => {
       try {
-        if (coords.accuracy > 100) {
-          setLocationError(
-            'Location accuracy is low. Please try again or use search.'
-          );
-          return;
-        }
-
         setStartLocation(coords);
         setEndLocation(null);
         setDistanceResult(null);
@@ -637,9 +285,20 @@ function LocationForm() {
         setEndSearchValue('');
 
         if (googleLoaded) {
-          const name = await reverseGeocode(coords);
-          setStartName(name);
-          setStartSearchValue(name);
+          const { address, status, isApproximate } = await reverseGeocode(
+            coords,
+            coords.accuracy
+          );
+          setStartName(address);
+          setStartSearchValue(address);
+
+          if (isApproximate) {
+            setLocationError(
+              `Showing nearby location (accuracy: ${Math.round(
+                coords.accuracy
+              )}m)`
+            );
+          }
         }
         setFlowStep('confirm-start');
       } catch (error) {
@@ -651,27 +310,27 @@ function LocationForm() {
     });
   };
 
-  const handleConfirmStart = () => {
-    setFlowStep('end');
-  };
-
   const handleEndTrip = () => {
     setLoading((prev) => ({ ...prev, end: true }));
     setLocationError(null);
     getCurrentLocation(async (coords) => {
       try {
-        if (coords.accuracy > 100) {
-          setLocationError(
-            'Location accuracy is low. Please try again or use search.'
-          );
-          return;
-        }
-
         setEndLocation(coords);
         if (googleLoaded) {
-          const name = await reverseGeocode(coords);
-          setEndName(name);
-          setEndSearchValue(name);
+          const { address, status, isApproximate } = await reverseGeocode(
+            coords,
+            coords.accuracy
+          );
+          setEndName(address);
+          setEndSearchValue(address);
+
+          if (isApproximate) {
+            setLocationError(
+              `Showing nearby location (accuracy: ${Math.round(
+                coords.accuracy
+              )}m)`
+            );
+          }
         }
         setFlowStep('confirm-end');
       } catch (error) {
@@ -683,18 +342,45 @@ function LocationForm() {
     });
   };
 
+  const handleConfirmStart = () => {
+    showConfirmationDialog(
+      'Confirm Start Location',
+      `Are you sure you want to set "${startName}" as your starting point?`,
+      () => {
+        setFlowStep('end');
+      }
+    );
+  };
+
   const handleConfirmEnd = () => {
-    if (startLocation && endLocation) {
-      calculateDistance(startLocation, endLocation);
-    }
-    setFlowStep('complete');
+    showConfirmationDialog(
+      'Confirm End Location',
+      `Are you sure you want to set "${endName}" as your destination?`,
+      async () => {
+        try {
+          setLoading({ start: true, end: true });
+          if (startLocation && endLocation) {
+            await calculateDistance(startLocation, endLocation);
+          }
+          setFlowStep('complete');
+
+          const tripData = formatTripDataForAPI();
+          console.log('Trip Data:', tripData);
+        } catch (error) {
+          console.error('Error calculating distance:', error);
+          setLocationError('Error calculating distance. Please try again.');
+        } finally {
+          setLoading({ start: false, end: false });
+        }
+      }
+    );
   };
 
   const handleStartLocationSelect = (locationData) => {
     const location = {
       lat: locationData.lat,
       lng: locationData.lng,
-      accuracy: 100, // Assume high accuracy for searched locations
+      accuracy: 100,
     };
     setStartLocation(location);
     setStartName(locationData.address);
@@ -706,7 +392,7 @@ function LocationForm() {
     const location = {
       lat: locationData.lat,
       lng: locationData.lng,
-      accuracy: 100, // Assume high accuracy for searched locations
+      accuracy: 100,
     };
     setEndLocation(location);
     setEndName(locationData.address);
@@ -726,6 +412,73 @@ function LocationForm() {
     setLoading({ start: false, end: false });
     setFlowStep('start');
     setLocationError(null);
+    setTripPurpose('');
+    setStartTime(null);
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    };
+    return date.toLocaleDateString(undefined, options);
+  };
+
+  const clearHistory = () => {
+    showConfirmationDialog(
+      'Clear History',
+      'Are you sure you want to clear all trip history?',
+      () => {
+        setTripHistory([]);
+      }
+    );
+  };
+
+  const loadTripFromHistory = (trip) => {
+    showConfirmationDialog(
+      'Load Trip',
+      `Do you want to load this trip from ${trip.startName} to ${trip.endName}?`,
+      () => {
+        setStartLocation({
+          lat: trip.coordinates.start.lat,
+          lng: trip.coordinates.start.lng,
+          accuracy: 10,
+        });
+        setEndLocation({
+          lat: trip.coordinates.end.lat,
+          lng: trip.coordinates.end.lng,
+          accuracy: 10,
+        });
+        setStartName(trip.startName);
+        setEndName(trip.endName);
+        setStartSearchValue(trip.startName);
+        setEndSearchValue(trip.endName);
+        setTravelMode(trip.travelMode);
+        setTripPurpose(trip.tripPurpose);
+        setClient(trip.client || '');
+        setVendor(trip.vendor || '');
+        setFlowStep('complete');
+
+        calculateDistance(
+          { lat: trip.coordinates.start.lat, lng: trip.coordinates.start.lng },
+          { lat: trip.coordinates.end.lat, lng: trip.coordinates.end.lng }
+        );
+      }
+    );
+  };
+
+  const deleteTripFromHistory = (tripId) => {
+    showConfirmationDialog(
+      'Delete Trip',
+      'Are you sure you want to delete this trip from history?',
+      () => {
+        setTripHistory((prev) => prev.filter((trip) => trip.id !== tripId));
+      }
+    );
   };
 
   if (!googleLoaded) {
@@ -760,6 +513,15 @@ function LocationForm() {
         className='container'
         style={{ maxWidth: '800px' }}
       >
+        {/* Confirmation Dialog */}
+        <ConfirmationDialog
+          show={showDialog}
+          title={dialogConfig.title}
+          message={dialogConfig.message}
+          onConfirm={dialogConfig.onConfirm}
+          onCancel={dialogConfig.onCancel}
+        />
+
         {/* Header */}
         <div className='text-center mb-4'>
           <div
@@ -792,6 +554,64 @@ function LocationForm() {
           </div>
         )}
 
+        {/* Travel Mode and Purpose Section */}
+        <div
+          className='card shadow-sm mb-4'
+          style={{ borderRadius: '12px', border: 'none' }}
+        >
+          <div className='card-body p-4'>
+            <TravelModeSelector
+              value={travelMode}
+              onChange={setTravelMode}
+            />
+
+            <div className='mb-3'>
+              <label className='form-label small text-muted'>
+                Purpose of Trip
+              </label>
+              <select
+                className='form-select form-select-sm'
+                value={tripPurpose}
+                onChange={(e) => setTripPurpose(e.target.value)}
+                style={{ borderRadius: '6px' }}
+              >
+                <option value=''>Select purpose</option>
+                <option value='business meeting'>Business Meeting</option>
+                <option value='site visit'>Site Visit</option>
+                <option value='client visit'>Client Visit</option>
+                <option value='delivery'>Delivery</option>
+                <option value='personal'>Personal</option>
+                <option value='other'>Other</option>
+              </select>
+            </div>
+
+            <div className='mb-3'>
+              <label className='form-label small text-muted'>Client</label>
+              <select
+                className='form-select form-select-sm'
+                value={client}
+                onChange={(e) => setClient(e.target.value)}
+                style={{ borderRadius: '6px' }}
+              >
+                <option value=''>Select Client</option>
+                <option value='HCL'>HCL</option>
+                <option value='RTT'>RTT</option>
+              </select>
+            </div>
+
+            <div className='mb-3'>
+              <label className='form-label small text-muted'>Vendor</label>
+              <input
+                type='text'
+                className='form-control form-control-sm'
+                value={vendor}
+                onChange={(e) => setVendor(e.target.value)}
+                placeholder='Enter vendor name'
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Map Section */}
         {(startLocation || endLocation) && (
           <div
@@ -812,6 +632,7 @@ function LocationForm() {
                 origin={startLocation}
                 destination={endLocation}
                 directions={directions}
+                travelMode={travelMode}
               />
             </div>
           </div>
@@ -1097,12 +918,110 @@ function LocationForm() {
               >
                 🗑️ Clear All
               </button>
+              <button
+                className='btn btn-sm btn-outline-primary w-100'
+                onClick={() => setShowHistory(!showHistory)}
+                style={{ borderRadius: '6px', padding: '6px 12px' }}
+              >
+                {showHistory ? 'Hide History' : 'Show History'}
+              </button>
             </div>
           </div>
         </div>
 
         {/* Distance Result */}
         {distanceResult && <DistanceResult data={distanceResult} />}
+
+        {/* History Section */}
+        {showHistory && (
+          <div
+            className='card shadow-sm mb-4'
+            style={{ borderRadius: '12px', border: 'none' }}
+          >
+            <div className='card-body p-4'>
+              <div className='d-flex justify-content-between align-items-center mb-3'>
+                <h3 className='h5 fw-bold text-dark mb-0'>
+                  <i className='fas fa-history me-2'></i>Trip History
+                </h3>
+                <div>
+                  <button
+                    className='btn btn-sm btn-outline-danger me-2'
+                    onClick={clearHistory}
+                    disabled={tripHistory.length === 0}
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    className='btn btn-sm btn-outline-secondary'
+                    onClick={() => setShowHistory(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              {tripHistory.length === 0 ? (
+                <div className='text-center py-4'>
+                  <i className='fas fa-clock fa-2x text-muted mb-3'></i>
+                  <p className='text-muted'>No trip history yet</p>
+                </div>
+              ) : (
+                <div
+                  className='list-group'
+                  style={{ maxHeight: '500px', overflowY: 'auto' }}
+                >
+                  {tripHistory.map((trip) => (
+                    <div
+                      key={trip.id}
+                      className='list-group-item border-0 py-3 px-0'
+                    >
+                      <div className='d-flex justify-content-between align-items-start'>
+                        <div style={{ flex: 1 }}>
+                          <div className='fw-bold'>
+                            {trip.startName} → {trip.endName}
+                          </div>
+                          <div className='small text-muted mb-2'>
+                            {formatDate(trip.date)}
+                          </div>
+                          <div className='small'>
+                            <span className='badge bg-primary me-2'>
+                              {trip.travelMode}
+                            </span>
+                            {trip.tripPurpose && (
+                              <span className='badge bg-secondary me-2'>
+                                {trip.tripPurpose}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className='text-end ms-3'>
+                          <div className='fw-bold'>{trip.distance}</div>
+                          <div className='small text-muted'>
+                            {trip.duration}
+                          </div>
+                        </div>
+                      </div>
+                      <div className='d-flex justify-content-end mt-2 gap-2'>
+                        <button
+                          className='btn btn-sm btn-outline-primary'
+                          onClick={() => loadTripFromHistory(trip)}
+                        >
+                          <i className='fas fa-undo me-1'></i> Reload
+                        </button>
+                        <button
+                          className='btn btn-sm btn-outline-danger'
+                          onClick={() => deleteTripFromHistory(trip.id)}
+                        >
+                          <i className='fas fa-trash me-1'></i> Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className='text-center mt-4'>
@@ -1119,5 +1038,3 @@ function LocationForm() {
     </div>
   );
 }
-
-export default LocationForm;

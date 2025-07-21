@@ -1,10 +1,53 @@
 import React from 'react';
 
-function DistanceResult({ data }) {
-  if (!data || !data.distance) return null;
+export default function DistanceResult({ data }) {
+  if (!data || typeof data !== 'object') {
+    console.error('Invalid data prop:', data);
+    return null;
+  }
 
   const isGoogleData = data.source === 'google';
   const isStraightLine = data.source === 'haversine';
+  const hasError = data.status === 'error';
+
+  const getTravelModeIcon = () => {
+    if (!data.travelMode) return '🚗';
+    switch (data.travelMode.toUpperCase()) {
+      case 'DRIVING':
+        return '🚗';
+      case 'WALKING':
+        return '🚶';
+      case 'BICYCLING':
+        return '🚴';
+      case 'TRANSIT':
+        return '🚆';
+      default:
+        return '🚗';
+    }
+  };
+
+  const getTravelModeLabel = () => {
+    if (!data.travelMode) return 'Driving';
+    switch (data.travelMode.toUpperCase()) {
+      case 'DRIVING':
+        return 'Driving';
+      case 'WALKING':
+        return 'Walking';
+      case 'BICYCLING':
+        return 'Bicycling';
+      case 'TRANSIT':
+        return 'Transit';
+      default:
+        return 'Driving';
+    }
+  };
+
+  const renderDistance = () => {
+    if (!data.distance) return 'N/A';
+    return typeof data.distance === 'string'
+      ? data.distance
+      : `${data.distance} km`;
+  };
 
   return (
     <div
@@ -19,9 +62,7 @@ function DistanceResult({ data }) {
             className='display-4 fw-bold'
             style={{ color: '#4f46e5' }}
           >
-            {typeof data.distance === 'string'
-              ? data.distance
-              : `${data.distance} km`}
+            {renderDistance()}
           </div>
 
           {data.duration && (
@@ -48,28 +89,42 @@ function DistanceResult({ data }) {
                 : 'bg-info'
             }`}
           >
-            {isGoogleData
-              ? 'Google Maps Route'
-              : isStraightLine
-              ? 'Straight Line'
-              : 'Road Route'}
+            {getTravelModeIcon()} {getTravelModeLabel()}
           </span>
 
-          {data.status === 'error' && (
-            <span className='badge bg-danger ms-2'>Error: {data.error}</span>
+          {hasError && (
+            <span className='badge bg-danger ms-2'>
+              Error: {data.error || 'Unknown error'}
+            </span>
           )}
         </div>
 
-        {data.startAddress && data.endAddress && (
+        {data.tripPurpose && (
+          <div className='mb-3'>
+            <div className='small text-muted'>Purpose:</div>
+            <div
+              className='small fw-bold'
+              style={{ textTransform: 'capitalize' }}
+            >
+              {data.tripPurpose}
+            </div>
+          </div>
+        )}
+
+        {(data.startAddress || data.endAddress) && (
           <div className='mb-3'>
             <div className='row'>
               <div className='col-12 col-md-6'>
                 <div className='small text-success fw-bold'>📍 Start:</div>
-                <div className='small text-muted'>{data.startAddress}</div>
+                <div className='small text-muted'>
+                  {data.startAddress || 'N/A'}
+                </div>
               </div>
               <div className='col-12 col-md-6'>
                 <div className='small text-danger fw-bold'>🏁 End:</div>
-                <div className='small text-muted'>{data.endAddress}</div>
+                <div className='small text-muted'>
+                  {data.endAddress || 'N/A'}
+                </div>
               </div>
             </div>
           </div>
@@ -83,7 +138,7 @@ function DistanceResult({ data }) {
             : 'Calculated using road network data'}
         </small>
 
-        {data.error && (
+        {hasError && (
           <div className='mt-2'>
             <small className='text-danger'>
               Note: Fallback calculation used due to API error
@@ -94,5 +149,3 @@ function DistanceResult({ data }) {
     </div>
   );
 }
-
-export default DistanceResult;
